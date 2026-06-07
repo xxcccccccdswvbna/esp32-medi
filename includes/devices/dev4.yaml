@@ -8,8 +8,3 @@
 # 4. 如支持状态回传，在 ble.yaml 添加解析分支
 
 # 🔹 临时占位（避免编译报错，启用后删除）
-binary_sensor:
-  - platform: template
-    name: "Dev4 Placeholder"
-    id: dev4_placeholder
-    internal: true

@@ -2,10 +2,8 @@ esphome:
   name: c6-midea-gateway
   friendly_name: "C6 Midea Gateway"
   build_path: build/c6-midea-gateway
-  platformio_options:
-    build_cache: true
 
-# 🔹 硬件基础配置（必须写在主文件，不能放在 packages 里）
+# 🔹 硬件基础配置（必须写在主文件）
 esp32:
   board: esp32-c6-devkitc-1
   framework:
@@ -13,7 +11,7 @@ esp32:
     version: recommended
 
 # =============================================================================
-# 🔹 核心：使用 packages 引入模块（ESPHome 官方标准写法）
+# 🔹 核心：使用 packages 引入模块
 # =============================================================================
 packages:
   ble: !include includes/ble.yaml

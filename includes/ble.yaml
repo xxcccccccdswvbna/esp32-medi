@@ -89,7 +89,7 @@ esp32_ble_tracker:
   on_ble_manufacturer_data_advertise:
     # =========================================================
     # 1704 协议 (Dev1, Dev2)
-    # 特点：x[9] 控制开关，0xFFFF/0xFF7F 都是 100% 亮度
+    # 核心修复：0x0600 (2%) 和 0xFFFF 都视为“关”
     # =========================================================
     - manufacturer_id: "06A8"
       then:
@@ -98,12 +98,12 @@ esp32_ble_tracker:
             
             // Dev1: CD AB 38 70
             if (x[3]==0xCD && x[4]==0xAB && x[5]==0x38 && x[6]==0x70) {
-              bool power_on = (x[9] > 0); // 0x0D 为开，0x00 为关
               uint16_t brt_raw = (x[14] << 8) | x[15];
+              // 核心：亮度 <= 0x0A00 (约4%) 或等于 0xFFFF，均视为关灯
+              bool power_on = (brt_raw > 0x0A00 && brt_raw != 0xFFFF);
               int brt_pct = 0;
               if (power_on) {
-                if (brt_raw == 0xFFFF || brt_raw == 0xFF7F) brt_pct = 100;
-                else brt_pct = (int)(brt_raw / 655.35);
+                brt_pct = (brt_raw == 0xFF7F || brt_raw == 0xFFFA) ? 100 : (int)(brt_raw / 655.35);
               }
               
               uint8_t fan_gear = x[19];
@@ -116,12 +116,11 @@ esp32_ble_tracker:
             }
             // Dev2: 92 26 35 70
             else if (x[3]==0x92 && x[4]==0x26 && x[5]==0x35 && x[6]==0x70) {
-              bool power_on = (x[9] > 0);
               uint16_t brt_raw = (x[14] << 8) | x[15];
+              bool power_on = (brt_raw > 0x0A00 && brt_raw != 0xFFFF);
               int brt_pct = 0;
               if (power_on) {
-                if (brt_raw == 0xFFFF || brt_raw == 0xFF7F) brt_pct = 100;
-                else brt_pct = (int)(brt_raw / 655.35);
+                brt_pct = (brt_raw == 0xFF7F || brt_raw == 0xFFFA) ? 100 : (int)(brt_raw / 655.35);
               }
               
               uint8_t fan_gear = x[19];
@@ -135,7 +134,7 @@ esp32_ble_tracker:
 
     # =========================================================
     # 134D 协议 (Dev3, Dev4)
-    # 特点：0xFFFF 代表关灯，x[18]==0x00 代表风扇开启
+    # 核心修复：x[18] == 0x20 才是“关风扇”，其他 (0x00, 0x10) 都是开
     # =========================================================
     - manufacturer_id: "134D"
       then:
@@ -146,14 +145,15 @@ esp32_ble_tracker:
             // Dev3: 48 80 27 70
             if (x[2]==0x48 && x[3]==0x80 && x[4]==0x27 && x[5]==0x70) {
               uint16_t brt_raw = (x[14] << 8) | x[15];
-              bool power_on = (brt_raw != 0xFFFF); // 0xFFFF 为关
+              bool power_on = (brt_raw > 0x0A00 && brt_raw != 0xFFFF);
               int brt_pct = 0;
               if (power_on) {
                 brt_pct = (brt_raw > 65000) ? 100 : (int)(brt_raw / 655.35);
               }
               
-              bool fan_running = (x[18] == 0x00); // 0x00 为开，0x10/0x20 为关
-              uint8_t fan_gear = fan_running ? x[19] : 0;
+              // 核心：x[18] != 0x20 即为风扇开启
+              bool fan_running = (x[18] != 0x20);
+              uint8_t fan_gear = fan_running ? (x[19] > 0 ? x[19] : 1) : 0;
               
               id(dev3_power).publish_state(power_on);
               id(dev3_fan_running).publish_state(fan_running);
@@ -163,14 +163,14 @@ esp32_ble_tracker:
             // Dev4: F0 CF 2D 70
             else if (x[2]==0xF0 && x[3]==0xCF && x[4]==0x2D && x[5]==0x70) {
               uint16_t brt_raw = (x[14] << 8) | x[15];
-              bool power_on = (brt_raw != 0xFFFF);
+              bool power_on = (brt_raw > 0x0A00 && brt_raw != 0xFFFF);
               int brt_pct = 0;
               if (power_on) {
                 brt_pct = (brt_raw > 65000) ? 100 : (int)(brt_raw / 655.35);
               }
               
-              bool fan_running = (x[18] == 0x00);
-              uint8_t fan_gear = fan_running ? x[19] : 0;
+              bool fan_running = (x[18] != 0x20);
+              uint8_t fan_gear = fan_running ? (x[19] > 0 ? x[19] : 1) : 0;
               
               id(dev4_power).publish_state(power_on);
               id(dev4_fan_running).publish_state(fan_running);

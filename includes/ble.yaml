@@ -1,0 +1,50 @@
+# =============================================================================
+# 🔹 BLE 基础栈
+# =============================================================================
+esp32_ble:
+  io_capability: none
+
+bluetooth_proxy:
+  active: true
+  cache_services: true
+
+# =============================================================================
+# 🔹 BLE 扫描（接收设备状态广播）
+# =============================================================================
+esp32_ble_tracker:
+  scan_parameters:
+    interval: 1000ms
+    window: 50ms
+    active: false
+  on_ble_manufacturer_data_advertise:
+    - manufacturer_id: "134D"
+      then:
+        - lambda: |-
+            // 🔹 基础校验
+            if (x.size() < 20) return;
+            if (x[0] != 0x21) return;
+            
+            // 🔹 Dev3 标识: 48 80 27 70 00 00
+            if (x[2]==0x48 && x[3]==0x80 && x[4]==0x27 && x[5]==0x70 && x[6]==0x00 && x[7]==0x00) {
+              bool power_on = (x[9] == 0x01);
+              bool fan_running = (x[18] & 0x01);
+              uint8_t fan_gear_idx = x[19];
+              uint16_t brt_raw = (x[14] << 8) | x[15];
+              int brt_pct = (brt_raw == 0xFFFF) ? 100 : (int)(brt_raw / 655.35);
+              
+              id(dev3_power).publish_state(power_on);
+              id(dev3_fan_running).publish_state(fan_running);
+              id(dev3_fan_speed).publish_state(fan_running ? (fan_gear_idx + 1) : 0);
+              id(dev3_brightness).publish_state(brt_pct);
+            }
+            // 🔹 Dev1 标识: 48 80 27 70 00 00 (与 Dev3 相同，通过其他字段区分或单独处理)
+            // 🔹 Dev2 标识: F0 CF 2D 70 00 00
+            // ➕ 新增设备时在此添加 else if 分支
+            // else if (x[2]==0xx && ...) { /* Dev4 解析逻辑 */ }
+
+# =============================================================================
+# 🔹 BLE 广播服务器（发送控制指令）
+# =============================================================================
+esp32_ble_server:
+  id: ble_server
+  manufacturer_data: []

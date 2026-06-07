@@ -130,29 +130,4 @@ button:
           id(pkt_2)={0x11,0x4D,0x19,0x1A,0xF0,0xCF,0x2D,0x70,0x00,0x00,0x01,0x2C,0x2D,0x70,0x70,0x00,0x5C,0xBF,0x1D,0x60,0xF0,0xF0,0xFC,0x3F,0xCF,0xCD};
       - script.execute: ble_send
 
-# ── 状态传感器 ─────────────────────────────────────────
-binary_sensor:
-  - platform: template
-    name: "Dev2 Light Power"
-    id: dev2_power
-    device_class: light
-    icon: mdi:ceiling-light
-  - platform: template
-    name: "Dev2 Fan Running"
-    id: dev2_fan_running
-    device_class: running
-    icon: mdi:fan
 
-sensor:
-  - platform: template
-    name: "Dev2 Fan Speed"
-    id: dev2_fan_speed
-    unit_of_measurement: "档"
-    accuracy_decimals: 0
-    icon: mdi:numeric
-  - platform: template
-    name: "Dev2 Brightness"
-    id: dev2_brightness
-    unit_of_measurement: "%"
-    accuracy_decimals: 0
-    icon: mdi:brightness-percent

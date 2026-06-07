@@ -1,0 +1,62 @@
+# =============================================================================
+# 🔹 WiFi 配置
+# =============================================================================
+wifi:
+  ssid: "CC"
+  password: "chen1122"
+  # 可选：静态 IP
+  # manual_ip:
+  #   static_ip: 192.168.6.82
+  #   gateway: 192.168.6.1
+  #   subnet: 255.255.255.0
+
+# =============================================================================
+# 🔹 API / OTA / Web Server
+# =============================================================================
+api:
+  encryption:
+    key: "4jGVSQw9/v+e8QCB/CSQIwGFcWS3Opo4oHSRbkq41RI="
+  reboot_timeout: 1h
+
+ota:
+  - platform: esphome
+    password: "chen1122"
+  - platform: web_server
+
+web_server:
+  port: 80
+  version: 2
+
+logger:
+  level: INFO
+
+# =============================================================================
+# 🔹 通用传感器（所有设备共享）
+# =============================================================================
+sensor:
+  - platform: wifi_signal
+    name: "WiFi Signal Strength"
+    id: wifi_signal_db
+    update_interval: 60s
+    entity_category: diagnostic
+
+  - platform: copy
+    source_id: wifi_signal_db
+    name: "WiFi Signal Percent"
+    filters:
+      - lambda: return min(max(2 * (x + 100.0), 0.0), 100.0);
+    unit_of_measurement: "%"
+    icon: mdi:wifi-strength-4
+    entity_category: diagnostic
+
+text_sensor:
+  - platform: wifi_info
+    ip_address:
+      name: "ESP IP Address"
+      entity_category: diagnostic
+    ssid:
+      name: "ESP Connected SSID"
+      entity_category: diagnostic
+    bssid:
+      name: "ESP Connected BSSID"
+      entity_category: diagnostic

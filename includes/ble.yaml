@@ -9,41 +9,79 @@ bluetooth_proxy:
   cache_services: true
 
 # =============================================================================
-# 🔹 BLE 扫描（接收设备状态广播）
+# 🔹 原始数据接收器（4 个设备，每个对应一个 text_sensor）
+# =============================================================================
+text_sensor:
+  - platform: template
+    name: "BLE Raw Dev1"
+    id: dev1_raw_hex
+  - platform: template
+    name: "BLE Raw Dev2"
+    id: dev2_raw_hex
+  - platform: template
+    name: "BLE Raw Dev3"
+    id: dev3_raw_hex
+  - platform: template
+    name: "BLE Raw Dev4"
+    id: dev4_raw_hex
+
+# =============================================================================
+# 🔹 BLE 扫描（仅做 Hex 转换 + 路由分发，不做协议解析）
 # =============================================================================
 esp32_ble_tracker:
   scan_parameters:
     interval: 1000ms
     window: 50ms
     active: false
+  
+  # ── 监听 1704 (0x06A8)：Dev1, Dev2 ─────────────────────────
   on_ble_manufacturer_data_advertise:
+    - manufacturer_id: "1704"
+      then:
+        - lambda: |-
+            // 极简 Hex 转换（纯查表，ESP32 负载 <0.1%）
+            std::string hex;
+            hex.reserve(x.size() * 2);
+            static const char h[] = "0123456789abcdef";
+            for (uint8_t b : x) {
+              hex += h[b >> 4];
+              hex += h[b & 0x0F];
+            }
+            if (x.size() < 8) return;
+            
+            // Dev1: CD AB 38 70
+            if (x[2]==0xCD && x[3]==0xAB && x[4]==0x38 && x[5]==0x70) {
+              id(dev1_raw_hex).publish_state(hex);
+            }
+            // Dev2: 92 26 35 70
+            else if (x[2]==0x92 && x[3]==0x26 && x[4]==0x35 && x[5]==0x70) {
+              id(dev2_raw_hex).publish_state(hex);
+            }
+
+    # ── 监听 4941 (0x134D)：Dev3, Dev4 ─────────────────────────
     - manufacturer_id: "134D"
       then:
         - lambda: |-
-            // 🔹 基础校验
-            if (x.size() < 20) return;
-            if (x[0] != 0x21) return;
-            
-            // 🔹 Dev3 标识: 48 80 27 70 00 00
-            if (x[2]==0x48 && x[3]==0x80 && x[4]==0x27 && x[5]==0x70 && x[6]==0x00 && x[7]==0x00) {
-              bool power_on = (x[9] == 0x01);
-              bool fan_running = (x[18] & 0x01);
-              uint8_t fan_gear_idx = x[19];
-              uint16_t brt_raw = (x[14] << 8) | x[15];
-              int brt_pct = (brt_raw == 0xFFFF) ? 100 : (int)(brt_raw / 655.35);
-              
-              id(dev3_power).publish_state(power_on);
-              id(dev3_fan_running).publish_state(fan_running);
-              id(dev3_fan_speed).publish_state(fan_running ? (fan_gear_idx + 1) : 0);
-              id(dev3_brightness).publish_state(brt_pct);
+            std::string hex;
+            hex.reserve(x.size() * 2);
+            static const char h[] = "0123456789abcdef";
+            for (uint8_t b : x) {
+              hex += h[b >> 4];
+              hex += h[b & 0x0F];
             }
-            // 🔹 Dev1 标识: 48 80 27 70 00 00 (与 Dev3 相同，通过其他字段区分或单独处理)
-            // 🔹 Dev2 标识: F0 CF 2D 70 00 00
-            // ➕ 新增设备时在此添加 else if 分支
-            // else if (x[2]==0xx && ...) { /* Dev4 解析逻辑 */ }
+            if (x.size() < 8) return;
+            
+            // Dev3: 48 80 27 70
+            if (x[2]==0x48 && x[3]==0x80 && x[4]==0x27 && x[5]==0x70) {
+              id(dev3_raw_hex).publish_state(hex);
+            }
+            // Dev4: F0 CF 2D 70
+            else if (x[2]==0xF0 && x[3]==0xCF && x[4]==0x2D && x[5]==0x70) {
+              id(dev4_raw_hex).publish_state(hex);
+            }
 
 # =============================================================================
-# 🔹 BLE 广播服务器（发送控制指令）
+# 🔹 BLE 广播服务器（发送控制指令，保持不变）
 # =============================================================================
 esp32_ble_server:
   id: ble_server

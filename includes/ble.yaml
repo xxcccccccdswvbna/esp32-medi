@@ -1,10 +1,18 @@
+esphome:
+  name: ble_fan_lights
+  platform: ESP32
+  board: esp32-s3-devkitc-1
+
 esp32_ble:
-  io_capability: none
+  io_capability: NONE
 
 bluetooth_proxy:
   active: true
   cache_services: true
 
+# ===============================
+# 模板 binary_sensor
+# ===============================
 binary_sensor:
   - platform: template
     name: "Dev1 Light Power"
@@ -14,6 +22,7 @@ binary_sensor:
     name: "Dev1 Fan Running"
     id: dev1_fan_running
     device_class: running
+
   - platform: template
     name: "Dev2 Light Power"
     id: dev2_power
@@ -22,6 +31,7 @@ binary_sensor:
     name: "Dev2 Fan Running"
     id: dev2_fan_running
     device_class: running
+
   - platform: template
     name: "Dev3 Light Power"
     id: dev3_power
@@ -30,6 +40,7 @@ binary_sensor:
     name: "Dev3 Fan Running"
     id: dev3_fan_running
     device_class: running
+
   - platform: template
     name: "Dev4 Light Power"
     id: dev4_power
@@ -39,6 +50,9 @@ binary_sensor:
     id: dev4_fan_running
     device_class: running
 
+# ===============================
+# 模板 sensor
+# ===============================
 sensor:
   - platform: template
     name: "Dev1 Brightness"
@@ -50,6 +64,7 @@ sensor:
     id: dev1_fan_speed
     unit_of_measurement: "档"
     accuracy_decimals: 0
+
   - platform: template
     name: "Dev2 Brightness"
     id: dev2_brightness
@@ -60,6 +75,7 @@ sensor:
     id: dev2_fan_speed
     unit_of_measurement: "档"
     accuracy_decimals: 0
+
   - platform: template
     name: "Dev3 Brightness"
     id: dev3_brightness
@@ -70,6 +86,7 @@ sensor:
     id: dev3_fan_speed
     unit_of_measurement: "档"
     accuracy_decimals: 0
+
   - platform: template
     name: "Dev4 Brightness"
     id: dev4_brightness
@@ -81,101 +98,59 @@ sensor:
     unit_of_measurement: "档"
     accuracy_decimals: 0
 
+# ===============================
+# esp32_ble_tracker
+# ===============================
 esp32_ble_tracker:
   scan_parameters:
     interval: 1000ms
     window: 50ms
     active: false
+
   on_ble_manufacturer_data_advertise:
     # =========================================================
-    # 1704 协议 (Dev1, Dev2)
-    # 核心修复：0x0600 (2%) 和 0xFFFF 都视为“关”
+    # 8153 v2 风扇灯协议 (Dev1~Dev4)
     # =========================================================
-    - manufacturer_id: "06A8"
+    - manufacturer_id: "8153"
       then:
         - lambda: |-
-            if (x.size() < 19) return;
-            
-            // Dev1: CD AB 38 70
-            if (x[3]==0xCD && x[4]==0xAB && x[5]==0x38 && x[6]==0x70) {
-              uint16_t brt_raw = (x[14] << 8) | x[15];
-              // 核心：亮度 <= 0x0A00 (约4%) 或等于 0xFFFF，均视为关灯
-              bool power_on = (brt_raw > 0x0A00 && brt_raw != 0xFFFF);
-              int brt_pct = 0;
-              if (power_on) {
-                brt_pct = (brt_raw == 0xFF7F || brt_raw == 0xFFFA) ? 100 : (int)(brt_raw / 655.35);
-              }
-              
-              uint8_t fan_gear = x[19];
-              bool fan_running = power_on && (fan_gear > 0);
-              
-              id(dev1_power).publish_state(power_on);
-              id(dev1_fan_running).publish_state(fan_running);
-              id(dev1_fan_speed).publish_state(fan_running ? fan_gear : 0);
-              id(dev1_brightness).publish_state(brt_pct);
-            }
-            // Dev2: 92 26 35 70
-            else if (x[3]==0x92 && x[4]==0x26 && x[5]==0x35 && x[6]==0x70) {
-              uint16_t brt_raw = (x[14] << 8) | x[15];
-              bool power_on = (brt_raw > 0x0A00 && brt_raw != 0xFFFF);
-              int brt_pct = 0;
-              if (power_on) {
-                brt_pct = (brt_raw == 0xFF7F || brt_raw == 0xFFFA) ? 100 : (int)(brt_raw / 655.35);
-              }
-              
-              uint8_t fan_gear = x[19];
-              bool fan_running = power_on && (fan_gear > 0);
-              
-              id(dev2_power).publish_state(power_on);
-              id(dev2_fan_running).publish_state(fan_running);
-              id(dev2_fan_speed).publish_state(fan_running ? fan_gear : 0);
-              id(dev2_brightness).publish_state(brt_pct);
-            }
+            if (x.size() < 20) return;
 
-    # =========================================================
-    # 134D 协议 (Dev3, Dev4)
-    # 核心修复：x[18] == 0x20 才是“关风扇”，其他 (0x00, 0x10) 都是开
-    # =========================================================
-    - manufacturer_id: "134D"
-      then:
-        - lambda: |-
-            if (x.size() < 19) return;
-            if (x[0] != 0x21) return;
-            
-            // Dev3: 48 80 27 70
-            if (x[2]==0x48 && x[3]==0x80 && x[4]==0x27 && x[5]==0x70) {
-              uint16_t brt_raw = (x[14] << 8) | x[15];
-              bool power_on = (brt_raw > 0x0A00 && brt_raw != 0xFFFF);
-              int brt_pct = 0;
-              if (power_on) {
-                brt_pct = (brt_raw > 65000) ? 100 : (int)(brt_raw / 655.35);
-              }
-              
-              // 核心：x[18] != 0x20 即为风扇开启
-              bool fan_running = (x[18] != 0x20);
-              uint8_t fan_gear = fan_running ? (x[19] > 0 ? x[19] : 1) : 0;
-              
-              id(dev3_power).publish_state(power_on);
+            // MAC 地址
+            std::string mac = x.to_string().substr(6,12);
+
+            // mode 字段
+            uint8_t mode = x[9];
+            bool led_on = mode & 0x01;
+            bool fan_running = (mode==0x12)||(mode==0x13)||(mode==0x32)||(mode==0x33);
+
+            // 亮度百分比
+            int brightness = int((x[12]/255.0)*100.0);
+
+            // 风扇档位
+            int fan_speed = fan_running ? (x[16]+1) : 0;
+
+            // 匹配设备
+            if (mac=="7da849700000") {  // Dev1
+              id(dev1_power).publish_state(led_on);
+              id(dev1_fan_running).publish_state(fan_running);
+              id(dev1_fan_speed).publish_state(fan_speed);
+              id(dev1_brightness).publish_state(brightness);
+            } else if (mac=="922635700000") {  // Dev2
+              id(dev2_power).publish_state(led_on);
+              id(dev2_fan_running).publish_state(fan_running);
+              id(dev2_fan_speed).publish_state(fan_speed);
+              id(dev2_brightness).publish_state(brightness);
+            } else if (mac=="cdab38700000") {  // Dev3
+              id(dev3_power).publish_state(led_on);
               id(dev3_fan_running).publish_state(fan_running);
-              id(dev3_fan_speed).publish_state(fan_gear);
-              id(dev3_brightness).publish_state(brt_pct);
-            }
-            // Dev4: F0 CF 2D 70
-            else if (x[2]==0xF0 && x[3]==0xCF && x[4]==0x2D && x[5]==0x70) {
-              uint16_t brt_raw = (x[14] << 8) | x[15];
-              bool power_on = (brt_raw > 0x0A00 && brt_raw != 0xFFFF);
-              int brt_pct = 0;
-              if (power_on) {
-                brt_pct = (brt_raw > 65000) ? 100 : (int)(brt_raw / 655.35);
-              }
-              
-              bool fan_running = (x[18] != 0x20);
-              uint8_t fan_gear = fan_running ? (x[19] > 0 ? x[19] : 1) : 0;
-              
-              id(dev4_power).publish_state(power_on);
+              id(dev3_fan_speed).publish_state(fan_speed);
+              id(dev3_brightness).publish_state(brightness);
+            } else if (mac=="f0cf2d700000") {  // Dev4
+              id(dev4_power).publish_state(led_on);
               id(dev4_fan_running).publish_state(fan_running);
-              id(dev4_fan_speed).publish_state(fan_gear);
-              id(dev4_brightness).publish_state(brt_pct);
+              id(dev4_fan_speed).publish_state(fan_speed);
+              id(dev4_brightness).publish_state(brightness);
             }
 
 esp32_ble_server:

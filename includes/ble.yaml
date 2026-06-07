@@ -87,6 +87,11 @@ esp32_ble_tracker:
     window: 50ms
     active: false
   on_ble_manufacturer_data_advertise:
+    
+    # =========================================================
+    # 1704 协议 (Dev1, Dev2)
+    # 偏移：Mode=x[11], 亮度=x[14], 档位=x[18]
+    # =========================================================
     - manufacturer_id: "06A8"
       then:
         - lambda: |-
@@ -94,80 +99,80 @@ esp32_ble_tracker:
             
             // Dev1 (CD AB 38 70)
             if (x[3]==0xCD && x[4]==0xAB && x[5]==0x38 && x[6]==0x70) {
-              uint16_t brt_raw = (x[14] << 8) | x[15];
-              bool power_on = (brt_raw != 0x0200 && x[9] > 0);
-              int brt_pct = 0;
-              if (power_on) {
-                if (brt_raw == 0xFFFF || brt_raw == 0xFF7F || brt_raw == 0x0600) brt_pct = 100;
-                else if (brt_raw == 0x0200) brt_pct = 0;
-                else brt_pct = (int)(brt_raw / 655.35);
-              }
-              uint8_t fan_gear = x[19];
-              bool fan_running = power_on && (fan_gear > 0);
-              id(dev1_power).publish_state(power_on);
-              id(dev1_fan_running).publish_state(fan_running);
-              id(dev1_fan_speed).publish_state(fan_running ? fan_gear : 0);
+              uint8_t mode = x[11];
+              bool led_on = (mode & 0x01) == 1;
+              bool fan_on = (mode & 0xF0) >= 0x12; // 0x12, 0x13, 0x32, 0x33
+              
+              uint8_t brt_raw = x[14];
+              int brt_pct = (int)round(brt_raw / 255.0 * 100);
+              
+              uint8_t fan_gear_raw = x[18];
+              int fan_gear = fan_on ? (fan_gear_raw + 1) : 0;
+              
+              id(dev1_power).publish_state(led_on);
+              id(dev1_fan_running).publish_state(fan_on);
+              id(dev1_fan_speed).publish_state(fan_gear);
               id(dev1_brightness).publish_state(brt_pct);
             }
             // Dev2 (92 26 35 70)
             else if (x[3]==0x92 && x[4]==0x26 && x[5]==0x35 && x[6]==0x70) {
-              uint16_t brt_raw = (x[14] << 8) | x[15];
-              bool power_on = (brt_raw != 0x0200 && x[9] > 0);
-              int brt_pct = 0;
-              if (power_on) {
-                if (brt_raw == 0xFFFF || brt_raw == 0xFF7F || brt_raw == 0x0600) brt_pct = 100;
-                else if (brt_raw == 0x0200) brt_pct = 0;
-                else brt_pct = (int)(brt_raw / 655.35);
-              }
-              uint8_t fan_gear = x[19];
-              bool fan_running = power_on && (fan_gear > 0);
-              id(dev2_power).publish_state(power_on);
-              id(dev2_fan_running).publish_state(fan_running);
-              id(dev2_fan_speed).publish_state(fan_running ? fan_gear : 0);
+              uint8_t mode = x[11];
+              bool led_on = (mode & 0x01) == 1;
+              bool fan_on = (mode & 0xF0) >= 0x12;
+              
+              uint8_t brt_raw = x[14];
+              int brt_pct = (int)round(brt_raw / 255.0 * 100);
+              
+              uint8_t fan_gear_raw = x[18];
+              int fan_gear = fan_on ? (fan_gear_raw + 1) : 0;
+              
+              id(dev2_power).publish_state(led_on);
+              id(dev2_fan_running).publish_state(fan_on);
+              id(dev2_fan_speed).publish_state(fan_gear);
               id(dev2_brightness).publish_state(brt_pct);
             }
 
+    # =========================================================
+    # 134D 协议 (Dev3, Dev4)
+    # 偏移：亮度=x[14], Mode=x[18], 档位=x[19]
+    # =========================================================
     - manufacturer_id: "134D"
       then:
         - lambda: |-
-            if (x.size() < 19) return;
+            if (x.size() < 20) return;
             if (x[0] != 0x21) return;
             
             // Dev3 (48 80 27 70)
             if (x[2]==0x48 && x[3]==0x80 && x[4]==0x27 && x[5]==0x70) {
-              uint16_t brt_raw = (x[14] << 8) | x[15];
-              bool power_on = (x[9] == 0x01 && brt_raw > 0x0100);
-              int brt_pct = 0;
-              if (power_on) {
-                if (brt_raw == 0xFFFA || brt_raw == 0xFFFF) brt_pct = 100;
-                else if (brt_raw == 0x0200) brt_pct = 1;
-                else brt_pct = (int)(brt_raw / 655.35);
-              }
-              uint8_t fan_gear = x[19];
-              if (fan_gear == 0x05) fan_gear = 6;
-              else if (fan_gear == 0x00 && power_on) fan_gear = 1;
-              bool fan_running = power_on && (fan_gear > 0);
-              id(dev3_power).publish_state(power_on);
-              id(dev3_fan_running).publish_state(fan_running);
+              uint8_t brt_raw = x[14];
+              int brt_pct = (int)round(brt_raw / 255.0 * 100);
+              
+              uint8_t mode = x[18];
+              bool led_on = (mode & 0x01) == 1;
+              bool fan_on = (mode & 0xF0) >= 0x12;
+              
+              uint8_t fan_gear_raw = x[19];
+              int fan_gear = fan_on ? (fan_gear_raw + 1) : 0;
+              
+              id(dev3_power).publish_state(led_on);
+              id(dev3_fan_running).publish_state(fan_on);
               id(dev3_fan_speed).publish_state(fan_gear);
               id(dev3_brightness).publish_state(brt_pct);
             }
             // Dev4 (F0 CF 2D 70)
             else if (x[2]==0xF0 && x[3]==0xCF && x[4]==0x2D && x[5]==0x70) {
-              uint16_t brt_raw = (x[14] << 8) | x[15];
-              bool power_on = (x[9] == 0x01 && brt_raw > 0x0100);
-              int brt_pct = 0;
-              if (power_on) {
-                if (brt_raw == 0xFFFA || brt_raw == 0xFFFF) brt_pct = 100;
-                else if (brt_raw == 0x0200) brt_pct = 1;
-                else brt_pct = (int)(brt_raw / 655.35);
-              }
-              uint8_t fan_gear = x[19];
-              if (fan_gear == 0x04) fan_gear = 6;
-              else if (fan_gear == 0x00 && power_on) fan_gear = 1;
-              bool fan_running = power_on && (fan_gear > 0);
-              id(dev4_power).publish_state(power_on);
-              id(dev4_fan_running).publish_state(fan_running);
+              uint8_t brt_raw = x[14];
+              int brt_pct = (int)round(brt_raw / 255.0 * 100);
+              
+              uint8_t mode = x[18];
+              bool led_on = (mode & 0x01) == 1;
+              bool fan_on = (mode & 0xF0) >= 0x12;
+              
+              uint8_t fan_gear_raw = x[19];
+              int fan_gear = fan_on ? (fan_gear_raw + 1) : 0;
+              
+              id(dev4_power).publish_state(led_on);
+              id(dev4_fan_running).publish_state(fan_on);
               id(dev4_fan_speed).publish_state(fan_gear);
               id(dev4_brightness).publish_state(brt_pct);
             }

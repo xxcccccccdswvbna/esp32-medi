@@ -1,22 +1,162 @@
-#9 resolving provenance for metadata file
-#9 DONE 0.0s
-ImageID
-Digest
-Metadata
-Reference
-Check build summary support
-Run summary=$(cat <<'ENDOFSUMMARY'
-INFO ESPHome 2026.5.3
-INFO Reading configuration c6-midea-gateway.yaml...
-Failed config
+esp32_ble:
+  io_capability: none
 
-sensor.template: [source includes/ble.yaml:42]
-  platform: template
-  name: Dev2 Light Power
-  id: dev2_power
-  
-  Unknown value 'light', did you mean 'weight'?.
-  device_class: light
-  icon: mdi:ceiling-light
-Compile firmware
-Error: Process completed with exit code 2.
+bluetooth_proxy:
+  active: true
+  cache_services: true
+
+binary_sensor:
+  - platform: template
+    name: "Dev1 Light Power"
+    id: dev1_power
+    device_class: light
+    icon: mdi:ceiling-light
+  - platform: template
+    name: "Dev1 Fan Running"
+    id: dev1_fan_running
+    device_class: running
+    icon: mdi:fan
+  - platform: template
+    name: "Dev2 Light Power"
+    id: dev2_power
+    device_class: light
+    icon: mdi:ceiling-light
+  - platform: template
+    name: "Dev2 Fan Running"
+    id: dev2_fan_running
+    device_class: running
+    icon: mdi:fan
+  - platform: template
+    name: "Dev3 Light Power"
+    id: dev3_power
+    device_class: light
+    icon: mdi:ceiling-light
+  - platform: template
+    name: "Dev3 Fan Running"
+    id: dev3_fan_running
+    device_class: running
+    icon: mdi:fan
+  - platform: template
+    name: "Dev4 Light Power"
+    id: dev4_power
+    device_class: light
+    icon: mdi:ceiling-light
+  - platform: template
+    name: "Dev4 Fan Running"
+    id: dev4_fan_running
+    device_class: running
+    icon: mdi:fan
+
+sensor:
+  - platform: template
+    name: "Dev1 Brightness"
+    id: dev1_brightness
+    unit_of_measurement: "%"
+    accuracy_decimals: 0
+    icon: mdi:brightness-percent
+  - platform: template
+    name: "Dev1 Fan Speed"
+    id: dev1_fan_speed
+    unit_of_measurement: "档"
+    accuracy_decimals: 0
+    icon: mdi:numeric
+  - platform: template
+    name: "Dev2 Brightness"
+    id: dev2_brightness
+    unit_of_measurement: "%"
+    accuracy_decimals: 0
+    icon: mdi:brightness-percent
+  - platform: template
+    name: "Dev2 Fan Speed"
+    id: dev2_fan_speed
+    unit_of_measurement: "档"
+    accuracy_decimals: 0
+    icon: mdi:numeric
+  - platform: template
+    name: "Dev3 Brightness"
+    id: dev3_brightness
+    unit_of_measurement: "%"
+    accuracy_decimals: 0
+    icon: mdi:brightness-percent
+  - platform: template
+    name: "Dev3 Fan Speed"
+    id: dev3_fan_speed
+    unit_of_measurement: "档"
+    accuracy_decimals: 0
+    icon: mdi:numeric
+  - platform: template
+    name: "Dev4 Brightness"
+    id: dev4_brightness
+    unit_of_measurement: "%"
+    accuracy_decimals: 0
+    icon: mdi:brightness-percent
+  - platform: template
+    name: "Dev4 Fan Speed"
+    id: dev4_fan_speed
+    unit_of_measurement: "档"
+    accuracy_decimals: 0
+    icon: mdi:numeric
+
+esp32_ble_tracker:
+  scan_parameters:
+    interval: 1000ms
+    window: 50ms
+    active: false
+  on_ble_manufacturer_data_advertise:
+    - manufacturer_id: "1704"
+      then:
+        - lambda: |-
+            if (x.size() < 20) return;
+            if (x[2]==0xCD && x[3]==0xAB && x[4]==0x38 && x[5]==0x70) {
+              bool power_on = (x[9] > 0);
+              bool fan_running = (x[18] & 0x01);
+              uint8_t fan_gear_idx = x[19];
+              uint16_t brt_raw = (x[14] << 8) | x[15];
+              int brt_pct = (brt_raw == 0xFFFF) ? 100 : (int)(brt_raw / 655.35);
+              id(dev1_power).publish_state(power_on);
+              id(dev1_fan_running).publish_state(fan_running);
+              id(dev1_fan_speed).publish_state(fan_running ? (fan_gear_idx + 1) : 0);
+              id(dev1_brightness).publish_state(brt_pct);
+            }
+            else if (x[2]==0x92 && x[3]==0x26 && x[4]==0x35 && x[5]==0x70) {
+              bool power_on = (x[9] > 0);
+              bool fan_running = (x[18] & 0x01);
+              uint8_t fan_gear_idx = x[19];
+              uint16_t brt_raw = (x[14] << 8) | x[15];
+              int brt_pct = (brt_raw == 0xFFFF) ? 100 : (int)(brt_raw / 655.35);
+              id(dev2_power).publish_state(power_on);
+              id(dev2_fan_running).publish_state(fan_running);
+              id(dev2_fan_speed).publish_state(fan_running ? (fan_gear_idx + 1) : 0);
+              id(dev2_brightness).publish_state(brt_pct);
+            }
+    - manufacturer_id: "134D"
+      then:
+        - lambda: |-
+            if (x.size() < 20) return;
+            if (x[0] != 0x21) return;
+            if (x[2]==0x48 && x[3]==0x80 && x[4]==0x27 && x[5]==0x70) {
+              bool power_on = (x[9] == 0x01);
+              bool fan_running = (x[18] & 0x01);
+              uint8_t fan_gear_idx = x[19];
+              uint16_t brt_raw = (x[14] << 8) | x[15];
+              int brt_pct = (brt_raw == 0xFFFF) ? 100 : (int)(brt_raw / 655.35);
+              id(dev3_power).publish_state(power_on);
+              id(dev3_fan_running).publish_state(fan_running);
+              id(dev3_fan_speed).publish_state(fan_running ? (fan_gear_idx + 1) : 0);
+              id(dev3_brightness).publish_state(brt_pct);
+            }
+            else if (x[2]==0xF0 && x[3]==0xCF && x[4]==0x2D && x[5]==0x70) {
+              bool power_on = (x[9] == 0x01);
+              bool fan_running = (x[18] & 0x01);
+              uint8_t fan_gear_idx = x[19];
+              uint16_t brt_raw = (x[14] << 8) | x[15];
+              int brt_pct = (brt_raw == 0xFFFF) ? 100 : (int)(brt_raw / 655.35);
+              id(dev4_power).publish_state(power_on);
+              id(dev4_fan_running).publish_state(fan_running);
+              id(dev4_fan_speed).publish_state(fan_running ? (fan_gear_idx + 1) : 0);
+              id(dev4_brightness).publish_state(brt_pct);
+            }
+
+esp32_ble_server:
+  id: ble_server
+  manufacturer_data: []

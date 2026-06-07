@@ -9,24 +9,109 @@ bluetooth_proxy:
   cache_services: true
 
 # =============================================================================
-# 🔹 原始数据接收器（4 个设备，每个对应一个 text_sensor）
+# 🔹 状态传感器声明（4个设备 × 4个状态 = 16个实体）
 # =============================================================================
-text_sensor:
+# Dev1 传感器
+binary_sensor:
   - platform: template
-    name: "BLE Raw Dev1"
-    id: dev1_raw_hex
+    name: "Dev1 Light Power"
+    id: dev1_power
+    device_class: light
+    icon: mdi:ceiling-light
   - platform: template
-    name: "BLE Raw Dev2"
-    id: dev2_raw_hex
+    name: "Dev1 Fan Running"
+    id: dev1_fan_running
+    device_class: running
+    icon: mdi:fan
+
+sensor:
   - platform: template
-    name: "BLE Raw Dev3"
-    id: dev3_raw_hex
+    name: "Dev1 Brightness"
+    id: dev1_brightness
+    unit_of_measurement: "%"
+    accuracy_decimals: 0
+    icon: mdi:brightness-percent
   - platform: template
-    name: "BLE Raw Dev4"
-    id: dev4_raw_hex
+    name: "Dev1 Fan Speed"
+    id: dev1_fan_speed
+    unit_of_measurement: "档"
+    accuracy_decimals: 0
+    icon: mdi:numeric
+
+# Dev2 传感器
+  - platform: template
+    name: "Dev2 Light Power"
+    id: dev2_power
+    device_class: light
+    icon: mdi:ceiling-light
+  - platform: template
+    name: "Dev2 Fan Running"
+    id: dev2_fan_running
+    device_class: running
+    icon: mdi:fan
+  - platform: template
+    name: "Dev2 Brightness"
+    id: dev2_brightness
+    unit_of_measurement: "%"
+    accuracy_decimals: 0
+    icon: mdi:brightness-percent
+  - platform: template
+    name: "Dev2 Fan Speed"
+    id: dev2_fan_speed
+    unit_of_measurement: "档"
+    accuracy_decimals: 0
+    icon: mdi:numeric
+
+# Dev3 传感器
+  - platform: template
+    name: "Dev3 Light Power"
+    id: dev3_power
+    device_class: light
+    icon: mdi:ceiling-light
+  - platform: template
+    name: "Dev3 Fan Running"
+    id: dev3_fan_running
+    device_class: running
+    icon: mdi:fan
+  - platform: template
+    name: "Dev3 Brightness"
+    id: dev3_brightness
+    unit_of_measurement: "%"
+    accuracy_decimals: 0
+    icon: mdi:brightness-percent
+  - platform: template
+    name: "Dev3 Fan Speed"
+    id: dev3_fan_speed
+    unit_of_measurement: "档"
+    accuracy_decimals: 0
+    icon: mdi:numeric
+
+# Dev4 传感器
+  - platform: template
+    name: "Dev4 Light Power"
+    id: dev4_power
+    device_class: light
+    icon: mdi:ceiling-light
+  - platform: template
+    name: "Dev4 Fan Running"
+    id: dev4_fan_running
+    device_class: running
+    icon: mdi:fan
+  - platform: template
+    name: "Dev4 Brightness"
+    id: dev4_brightness
+    unit_of_measurement: "%"
+    accuracy_decimals: 0
+    icon: mdi:brightness-percent
+  - platform: template
+    name: "Dev4 Fan Speed"
+    id: dev4_fan_speed
+    unit_of_measurement: "档"
+    accuracy_decimals: 0
+    icon: mdi:numeric
 
 # =============================================================================
-# 🔹 BLE 扫描（仅做 Hex 转换 + 路由分发，不做协议解析）
+# 🔹 BLE 扫描与解析逻辑（核心）
 # =============================================================================
 esp32_ble_tracker:
   scan_parameters:
@@ -34,50 +119,73 @@ esp32_ble_tracker:
     window: 50ms
     active: false
   
-  # ── 监听 1704 (0x06A8)：Dev1, Dev2 ─────────────────────────
+  # ─ 监听 1704 (0x06A8)：Dev1, Dev2 ────────────────────────
   on_ble_manufacturer_data_advertise:
     - manufacturer_id: "1704"
       then:
         - lambda: |-
-            // 极简 Hex 转换（纯查表，ESP32 负载 <0.1%）
-            std::string hex;
-            hex.reserve(x.size() * 2);
-            static const char h[] = "0123456789abcdef";
-            for (uint8_t b : x) {
-              hex += h[b >> 4];
-              hex += h[b & 0x0F];
-            }
-            if (x.size() < 8) return;
+            if (x.size() < 20) return;
+            // Dev1/2 的广播头是 0x81，不校验头，直接校验标识字节
             
             // Dev1: CD AB 38 70
             if (x[2]==0xCD && x[3]==0xAB && x[4]==0x38 && x[5]==0x70) {
-              id(dev1_raw_hex).publish_state(hex);
+              bool power_on = (x[9] > 0); // 抓包显示 0x0d 为开，0x00 为关
+              bool fan_running = (x[18] & 0x01);
+              uint8_t fan_gear_idx = x[19];
+              uint16_t brt_raw = (x[14] << 8) | x[15];
+              int brt_pct = (brt_raw == 0xFFFF) ? 100 : (int)(brt_raw / 655.35);
+              
+              id(dev1_power).publish_state(power_on);
+              id(dev1_fan_running).publish_state(fan_running);
+              id(dev1_fan_speed).publish_state(fan_running ? (fan_gear_idx + 1) : 0);
+              id(dev1_brightness).publish_state(brt_pct);
             }
             // Dev2: 92 26 35 70
             else if (x[2]==0x92 && x[3]==0x26 && x[4]==0x35 && x[5]==0x70) {
-              id(dev2_raw_hex).publish_state(hex);
+              bool power_on = (x[9] > 0);
+              bool fan_running = (x[18] & 0x01);
+              uint8_t fan_gear_idx = x[19];
+              uint16_t brt_raw = (x[14] << 8) | x[15];
+              int brt_pct = (brt_raw == 0xFFFF) ? 100 : (int)(brt_raw / 655.35);
+              
+              id(dev2_power).publish_state(power_on);
+              id(dev2_fan_running).publish_state(fan_running);
+              id(dev2_fan_speed).publish_state(fan_running ? (fan_gear_idx + 1) : 0);
+              id(dev2_brightness).publish_state(brt_pct);
             }
 
     # ── 监听 4941 (0x134D)：Dev3, Dev4 ─────────────────────────
     - manufacturer_id: "134D"
       then:
         - lambda: |-
-            std::string hex;
-            hex.reserve(x.size() * 2);
-            static const char h[] = "0123456789abcdef";
-            for (uint8_t b : x) {
-              hex += h[b >> 4];
-              hex += h[b & 0x0F];
-            }
-            if (x.size() < 8) return;
+            if (x.size() < 20) return;
+            if (x[0] != 0x21) return; // Dev3/4 广播头校验
             
             // Dev3: 48 80 27 70
             if (x[2]==0x48 && x[3]==0x80 && x[4]==0x27 && x[5]==0x70) {
-              id(dev3_raw_hex).publish_state(hex);
+              bool power_on = (x[9] == 0x01);
+              bool fan_running = (x[18] & 0x01);
+              uint8_t fan_gear_idx = x[19];
+              uint16_t brt_raw = (x[14] << 8) | x[15];
+              int brt_pct = (brt_raw == 0xFFFF) ? 100 : (int)(brt_raw / 655.35);
+              
+              id(dev3_power).publish_state(power_on);
+              id(dev3_fan_running).publish_state(fan_running);
+              id(dev3_fan_speed).publish_state(fan_running ? (fan_gear_idx + 1) : 0);
+              id(dev3_brightness).publish_state(brt_pct);
             }
             // Dev4: F0 CF 2D 70
             else if (x[2]==0xF0 && x[3]==0xCF && x[4]==0x2D && x[5]==0x70) {
-              id(dev4_raw_hex).publish_state(hex);
+              bool power_on = (x[9] == 0x01); // 抓包显示 0x00 为关
+              bool fan_running = (x[18] & 0x01);
+              uint8_t fan_gear_idx = x[19];
+              uint16_t brt_raw = (x[14] << 8) | x[15];
+              int brt_pct = (brt_raw == 0xFFFF) ? 100 : (int)(brt_raw / 655.35);
+              
+              id(dev4_power).publish_state(power_on);
+              id(dev4_fan_running).publish_state(fan_running);
+              id(dev4_fan_speed).publish_state(fan_running ? (fan_gear_idx + 1) : 0);
+              id(dev4_brightness).publish_state(brt_pct);
             }
 
 # =============================================================================

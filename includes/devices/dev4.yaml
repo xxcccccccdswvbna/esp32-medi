@@ -1,0 +1,15 @@
+# =============================================================================
+# Dev4: 预留配置（复制 _template.yaml 并修改标记后启用）
+# =============================================================================
+# ✅ 启用步骤：
+# 1. 复制 includes/devices/_template.yaml → 覆盖本文件
+# 2. 替换标记：<<DEV_NUM>>=4, <<DEV_NAME>>="你的设备名", <<ID_Bx>>=设备标识字节
+# 3. 在主文件取消注释: !include includes/devices/dev4.yaml
+# 4. 如支持状态回传，在 ble.yaml 添加解析分支
+
+# 🔹 临时占位（避免编译报错，启用后删除）
+binary_sensor:
+  - platform: template
+    name: "Dev4 Placeholder"
+    id: dev4_placeholder
+    internal: true

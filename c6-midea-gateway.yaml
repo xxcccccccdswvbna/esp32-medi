@@ -1,0 +1,23 @@
+esphome:
+  name: c6-midea-gateway
+  friendly_name: "C6 Midea Gateway"
+  build_path: build/c6-midea-gateway
+  platformio_options:
+    build_cache: true
+
+# =============================================================================
+# 🔹 基础模块（顺序重要：先基础，后依赖）
+# =============================================================================
+!include includes/base.yaml
+!include includes/ble.yaml
+!include includes/globals_scripts.yaml
+!include includes/network.yaml
+
+# =============================================================================
+# 🔹 设备模块（按需添加/删除，新增设备只需加一行 !include）
+# =============================================================================
+!include includes/devices/dev1.yaml
+!include includes/devices/dev2.yaml
+!include includes/devices/dev3.yaml
+# !include includes/devices/dev4.yaml   # 新增 Dev4 时取消注释
+# !include includes/devices/dev5.yaml   # 未来扩展

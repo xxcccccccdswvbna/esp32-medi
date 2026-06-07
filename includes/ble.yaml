@@ -87,8 +87,8 @@ esp32_ble_tracker:
     window: 50ms
     active: false
   on_ble_manufacturer_data_advertise:
-    # 修正：去掉引号，使用 YAML 原生十六进制整数
-    - manufacturer_id: 0x06A8
+    # 修正：必须使用纯十六进制字符串 "06A8"，绝对不能带 0x 前缀！
+    - manufacturer_id: "06A8"
       then:
         - lambda: |-
             if (x.size() < 19) return;
@@ -118,8 +118,8 @@ esp32_ble_tracker:
               id(dev2_brightness).publish_state(brt_pct);
             }
 
-    # 134D 协议 (Dev3, Dev4) - 同样去掉引号
-    - manufacturer_id: 0x134D
+    # 134D 协议 (Dev3, Dev4)
+    - manufacturer_id: "134D"
       then:
         - lambda: |-
             if (x.size() < 19) return;

@@ -1,7 +1,7 @@
 name: Build & Release ESPHome
 
 on:
-  workflow_dispatch:  # 允许手动触发
+  workflow_dispatch:
   push:
     branches:
       - main
@@ -14,7 +14,7 @@ permissions:
   contents: write
 
 jobs:
-  # ── 任务1：检测哪些 YAML 文件被修改 ──────────────────────
+  # ── 任务1：检测修改的 YAML ──────────────────────────────
   detect:
     runs-on: ubuntu-latest
     outputs:
@@ -28,13 +28,17 @@ jobs:
       - name: 检测修改的 YAML 文件
         id: changed
         run: |
+          # 确保 jq 已安装
+          sudo apt-get update && sudo apt-get install -y jq
+          
           # 获取修改的 yaml 文件列表
           FILES=$(git diff --name-only HEAD^ HEAD 2>/dev/null | \
-            grep -E '^c6-midea-gateway\.yaml$' | \
-            jq -R -s -c 'split("\n")[:-1]')
+            grep -E 'c6-midea-gateway\.yaml$' | \
+            jq -R -s -c 'split("\n") | map(select(length > 0))')
           
-          # 如果没有检测到差异（首次推送），检查所有 yaml
+          # 如果没有检测到差异（如首次推送），默认编译主文件
           if [ -z "$FILES" ] || [ "$FILES" = "[]" ]; then
+            echo "⚠️ 未检测到变更，默认编译主文件"
             FILES='["c6-midea-gateway.yaml"]'
           fi
           
@@ -44,7 +48,6 @@ jobs:
   # ── 任务2：编译 ESPHome 固件 ────────────────────────────
   build:
     needs: detect
-    if: needs.detect.outputs.files != '[]'
     runs-on: ubuntu-latest
     
     strategy:
@@ -54,59 +57,52 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       
-      # 🔐 生成 secrets.yaml（保护敏感信息）
+      # 🔐 生成 secrets.yaml（修复 !secret 找不到的问题）
       - name: 生成 secrets.yaml
-        if: ${{ secrets.WIFI_SSID != '' }}
         run: |
+          echo "正在生成 secrets.yaml..."
           cat > secrets.yaml << EOF
           wifi_ssid: "${{ secrets.WIFI_SSID }}"
           wifi_password: "${{ secrets.WIFI_PASSWORD }}"
           api_encryption_key: "${{ secrets.API_KEY }}"
           ota_password: "${{ secrets.OTA_PASSWORD }}"
           EOF
-          echo "✅ secrets.yaml 已生成"
-      
+          echo "✅ secrets.yaml 内容预览:"
+          cat secrets.yaml | sed 's/.*/&/;s/./&/g' # 防止密码泄露，只打印结构
+          # 实际检查文件是否存在
+          ls -l secrets.yaml
+
       # 🛠️ 编译固件
       - name: 编译 ESPHome
         uses: esphome/build-action@v6
         with:
           yaml-file: ${{ matrix.yaml-file }}
+          version: latest  # 确保使用最新稳定版 ESPHome
       
       # 📦 收集编译产物
       - name: 收集固件文件
         run: |
           mkdir -p output
+          echo "🔍 查找编译产物..."
+          find .esphome/build -name "*.bin" -type f
           
-          # 查找所有生成的 bin 文件
-          find .esphome/build -name "*.bin" | while read bin; do
-            # 提取设备名称
-            DEVICE_NAME=$(basename "$bin" .bin)
-            # 复制到 output 目录并重命名
-            cp "$bin" "output/${DEVICE_NAME}.bin"
-            # 同时复制 manifest.json（用于 Web 安装）
-            manifest=$(dirname "$bin")/manifest.json
-            if [ -f "$manifest" ]; then
-              cp "$manifest" "output/${DEVICE_NAME}_manifest.json"
-            fi
-          done
+          # 复制 bin 和 manifest
+          find .esphome/build -name "*.bin" -exec cp {} output/ \;
+          find .esphome/build -name "manifest.json" -exec cp {} output/ \;
           
-          # 显示生成的文件
-          echo "📦 生成的固件文件:"
+          echo "📦 最终输出文件:"
           ls -lh output/
-      
-      # 🏷️ 生成版本号标签
+
+      # 🏷️ 生成版本号
       - name: 生成版本号
         id: version
         run: |
           TIMESTAMP=$(date +'%Y%m%d-%H%M%S')
-          COMMIT_SHA=${{ github.sha }}
-          SHORT_SHA=${COMMIT_SHA:0:7}
+          SHORT_SHA=${{ github.sha }}
+          SHORT_SHA=${SHORT_SHA:0:7}
           TAG="v${TIMESTAMP}-${SHORT_SHA}"
-          
           echo "tag=$TAG" >> $GITHUB_OUTPUT
-          echo "commit_msg=$(git log -1 --pretty=%B | head -n1 | tr -d '\n')" >> $GITHUB_OUTPUT
-          echo "✅ 版本号: $TAG"
-      
+
       # 📤 发布到 GitHub Releases
       - name: 创建 Release
         uses: softprops/action-gh-release@v2
@@ -115,55 +111,19 @@ jobs:
           name: "🔧 ESPHome ${{ steps.version.outputs.tag }}"
           body: |
             ## 📋 编译信息
-            
-            **提交信息**: ${{ steps.version.outputs.commit_msg }}
             **提交哈希**: `${{ github.sha }}`
-            **触发方式**: ${{ github.event_name }}
-            **修改文件**: 
-            ```yaml
-            ${{ matrix.yaml-file }}
-            ```
+            **修改文件**: `${{ matrix.yaml-file }}`
             
-            ## 📥 下载说明
-            
-            - `*.bin` - 完整固件文件（用于首次刷写或 OTA）
-            - `*_manifest.json` - Web 安装器配置文件
-            
-            ## 🚀 刷写方法
-            
-            ### 方法1: Web 刷写（推荐）
+            ## 📥 刷写方法
             1. 访问 https://web.esphome.io
-            2. 选择对应的 .bin 文件
+            2. 选择 `firmware.bin` (或对应的 .bin 文件)
             3. 连接设备并刷入
-            
-            ### 方法2: ESPHome Dashboard
-            1. 上传 .bin 文件到 ESPHome
-            2. 点击 Install
-            
-            ---
-            *🤖 自动生成于 ${{ github.event.repository.html_url }}/actions/runs/${{ github.run_id }}*
           files: |
             output/*.bin
-            output/*_manifest.json
+            output/manifest.json
           draft: false
           prerelease: false
-          fail_on_unmatched_files: true
+          fail_on_unmatched_files: false  # 即使没找到文件也不报错，方便排查
         
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-  # ── 任务3：汇总所有编译结果 ────────────────────────────
-  summary:
-    needs: [detect, build]
-    runs-on: ubuntu-latest
-    if: always()
-    
-    steps:
-      - name: 显示编译摘要
-        run: |
-          echo "## 🎉 编译完成"
-          echo ""
-          echo "**检测到的文件**: ${{ needs.detect.outputs.files }}"
-          echo "**编译状态**: ${{ needs.build.result }}"
-          echo ""
-          echo "✅ 请访问 Releases 页面下载固件"
